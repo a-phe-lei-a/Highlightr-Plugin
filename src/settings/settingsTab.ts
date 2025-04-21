@@ -10,6 +10,7 @@ import Pickr from "@simonwep/pickr";
 import Sortable from "sortablejs";
 import { HIGHLIGHTER_METHODS, HIGHLIGHTER_STYLES } from "./settingsData";
 import { setAttributes } from "src/utils/setAttributes";
+import { sanitizeForClassName } from "src/utils/util";
 
 export class HighlightrSettingTab extends PluginSettingTab {
   plugin: HighlightrPlugin;
@@ -155,9 +156,14 @@ export class HighlightrSettingTab extends PluginSettingTab {
           .on("change", function (color: Pickr.HSVaColor) {
             colorHex = color.toHEXA().toString();
             let newColor;
-            colorHex.length == 6
-              ? (newColor = `${color.toHEXA().toString()}A6`)
-              : (newColor = color.toHEXA().toString());
+            if (colorHex.length === 6) {
+              newColor = `#${colorHex}A6`;
+            } else if (colorHex.length === 8) {
+              newColor = `#${colorHex}`;
+            } else {
+              newColor = colorHex;
+            }
+
             colorInput.inputEl.setAttribute(
               "style",
               `background-color: ${newColor}; color: var(--text-normal);`
@@ -168,16 +174,15 @@ export class HighlightrSettingTab extends PluginSettingTab {
               style: `background-color: ${newColor}; color: var(--text-normal);`,
             });
             input.setText(newColor);
-            input.textContent = newColor;
-            input.value = newColor;
             input.trigger("change");
           })
           .on("save", function (color: Pickr.HSVaColor, instance: Pickr) {
             let newColorValue = color.toHEXA().toString();
+            if (newColorValue.length === 6 || newColorValue.length === 8) {
+              newColorValue = `#${newColorValue}`;
+            }
 
             input.setText(newColorValue);
-            input.textContent = newColorValue;
-            input.value = newColorValue;
             input.trigger("change");
 
             instance.hide();
@@ -191,10 +196,19 @@ export class HighlightrSettingTab extends PluginSettingTab {
           .setIcon("highlightr-save")
           .setTooltip("Save")
           .onClick(async (buttonEl: any) => {
-            let color = colorInput.inputEl.value.replace(" ", "-");
-            let value = valueInput.inputEl.value;
+            let color = colorInput.inputEl.value.trim();
+            let value = valueInput.inputEl.value.trim();
+
+            if (value && !value.startsWith('#') && /^[0-9a-fA-F]{6,8}$/.test(value)) {
+              value = `#${value}`;
+            }
 
             if (color && value) {
+              if (!/^#[0-9a-fA-F]{6,8}$/i.test(value)) {
+                new Notice("Invalid hex code format. Use #RRGGBB or #RRGGBBAA.");
+                return;
+              }
+
               if (!this.plugin.settings.highlighterOrder.includes(color)) {
                 this.plugin.settings.highlighterOrder.push(color);
                 this.plugin.settings.highlighters[color] = value;
@@ -208,11 +222,13 @@ export class HighlightrSettingTab extends PluginSettingTab {
                 new Notice("This color already exists");
               }
             }
-            color && !value
-              ? new Notice("Highlighter hex code missing")
-              : !color && value
-              ? new Notice("Highlighter name missing")
-              : new Notice("Highlighter values missing"); // else
+            if (!color && !value) {
+              new Notice("Highlighter name and hex code missing");
+            } else if (!color) {
+              new Notice("Highlighter name missing");
+            } else if (!value) {
+              new Notice("Highlighter hex code missing");
+            }
           });
       });
 
@@ -246,10 +262,58 @@ export class HighlightrSettingTab extends PluginSettingTab {
       colorIcon.addClass("highlighter-setting-icon");
       colorIcon.innerHTML = icon;
 
+      const nameInput = new TextComponent(settingItem)
+        .setValue(highlighter)
+        .setPlaceholder("Highlighter name");
+
       new Setting(settingItem)
         .setClass("highlighter-setting-item")
-        .setName(highlighter)
         .setDesc(this.plugin.settings.highlighters[highlighter])
+        .addButton((button) => {
+          button
+            .setClass("HighlightrSettingsButton")
+            .setIcon("highlightr-save")
+            .setTooltip("Save Name")
+            .onClick(async () => {
+              const oldName = highlighter;
+              const newName = nameInput.getValue().trim();
+              const colorValue = this.plugin.settings.highlighters[oldName];
+
+              if (!newName) {
+                new Notice("Highlighter name cannot be empty.");
+                return;
+              }
+
+              if (newName === oldName) {
+                return;
+              }
+
+              if (this.plugin.settings.highlighterOrder.includes(newName)) {
+                new Notice(`Highlighter name "${newName}" already exists.`);
+                return;
+              }
+
+              delete this.plugin.settings.highlighters[oldName];
+              this.plugin.settings.highlighters[newName] = colorValue;
+
+              const index = this.plugin.settings.highlighterOrder.indexOf(oldName);
+              if (index > -1) {
+                this.plugin.settings.highlighterOrder[index] = newName;
+              }
+
+              (this.app as any).commands.removeCommand(
+                `highlightr-plugin:${oldName}`
+              );
+
+              setTimeout(() => {
+                dispatchEvent(new Event("Highlightr-NewCommand"));
+              }, 100);
+
+              await this.plugin.saveSettings();
+              new Notice(`Renamed "${oldName}" to "${newName}"`);
+              this.display();
+            });
+        })
         .addButton((button) => {
           button
             .setClass("HighlightrSettingsButton")
@@ -270,6 +334,11 @@ export class HighlightrSettingTab extends PluginSettingTab {
               this.display();
             });
         });
+
+      settingItem
+        .querySelector(".setting-item-info .setting-item-name")
+        ?.prepend(nameInput.inputEl);
+      nameInput.inputEl.addClass("highlighter-name-input");
 
       const a = createEl("a");
       a.setAttribute("href", "");

@@ -6,6 +6,7 @@ import {
   EnhancedEditor,
   EnhancedMenu,
 } from "src/settings/types";
+import { sanitizeForClassName } from "src/utils/util"; // Import the function
 
 const highlighterMenu = (
   app: EnhancedApp,
@@ -26,7 +27,8 @@ const highlighterMenu = (
     settings.highlighterOrder.forEach((highlighter) => {
       menu.addItem((highlighterItem) => {
         highlighterItem.setTitle(highlighter);
-        highlighterItem.setIcon(`highlightr-pen-${highlighter}`.toLowerCase());
+        // Sanitize the highlighter name for the icon
+        highlighterItem.setIcon(`highlightr-pen-${sanitizeForClassName(highlighter)}`);
         highlighterItem.onClick(() => {
           app.commands.executeCommandById(`highlightr-plugin:${highlighter}`);
         });

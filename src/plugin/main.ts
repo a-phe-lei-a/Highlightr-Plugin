@@ -1,5 +1,5 @@
 import { Editor, Menu, Plugin, PluginManifest } from "obsidian";
-import { wait } from "src/utils/util";
+import { wait, sanitizeForClassName } from "src/utils/util"; // Import the function
 import addIcons from "src/icons/customIcons";
 import { HighlightrSettingTab } from "../settings/settingsTab";
 import { HighlightrSettings } from "../settings/settingsData";
@@ -151,7 +151,8 @@ export default class HighlightrPlugin extends Plugin {
       };
 
       Object.keys(commandsMap).forEach((type) => {
-        let highlighterpen = `highlightr-pen-${highlighterKey}`.toLowerCase();
+        // Sanitize the highlighter name for the icon
+        let highlighterpen = `highlightr-pen-${sanitizeForClassName(highlighterKey)}`;
         this.addCommand({
           id: highlighterKey,
           name: highlighterKey,
